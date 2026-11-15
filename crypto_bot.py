@@ -1,4 +1,5 @@
 import json
+import os
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
@@ -10,7 +11,17 @@ COINS = {
     "XRP": "ripple",
     "BNB": "binancecoin"
 }
+STATE_FILE = "last_signals.json"
 
+def load_signals():
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_signals(signals):
+    with open(STATE_FILE, "w") as f:
+        json.dump(signals, f)
 def get_market_data(coin_id):
     url = (
         "https://api.coingecko.com/api/v3/"
@@ -32,7 +43,7 @@ def get_market_data(coin_id):
         return json.load(response)
 
 
-def analyze_coin(symbol, coin_id):
+def analyze_coin(symbol, coin_id, previous_signals):
     try:
         data = get_market_data(coin_id)
         prices = [p[1] for p in data["prices"]]
@@ -78,7 +89,17 @@ def analyze_coin(symbol, coin_id):
                 f"Change: {change:+.2f}%\n"
                 f"Reason: {reason}"
             )
-            send_telegram(message)
+            old_signal = previous_signals.get(symbol)
+
+if old_signal is None:
+    print(symbol + ": Initial signal recorded")
+elif signal != old_signal:
+    send_telegram(message)
+    print(symbol + ": Signal changed from " + old_signal + " to " + signal)
+else:
+    print(symbol + ": Signal unchanged. No alert.")
+
+previous_signals[symbol] = signal
 
     except Exception as e:
         print("------------------------")
@@ -87,6 +108,11 @@ def analyze_coin(symbol, coin_id):
 
 
 def main():
+    previous_signals = load_signals()
+
+
+
+    
     print("CRYPTO TRADING ALERT BOT")
     print(
         datetime.now(timezone.utc).strftime(
@@ -95,7 +121,7 @@ def main():
     )
 
     for symbol, coin_id in COINS.items():
-        analyze_coin(symbol, coin_id)
+        analyze_coin(symbol, coin_id, previous_signals)
 
 import os
 
