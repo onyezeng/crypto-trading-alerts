@@ -2,20 +2,45 @@ import json
 import urllib.request
 from datetime import datetime, timezone
 
-COINS = ["ETHUSDT", "BTCUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
+COINS = {
+    "BTC": "XBTUSD",
+    "ETH": "ETHUSD",
+    "SOL": "SOLUSD",
+    "XRP": "XRPUSD",
+    "BNB": None
+}
 
-def get_candles(symbol):
+def get_candles(pair):
+    if pair is None:
+        return None
+
     url = (
-        "https://api.binance.com/api/v3/klines"
-        f"?symbol={symbol}&interval=1h&limit=100"
+        "https://api.kraken.com/0/public/OHLC"
+        f"?pair={pair}&interval=5"
     )
+
     req = urllib.request.Request(
-        url, headers={"User-Agent": "CryptoAlertBot/1.0"}
+        url,
+        headers={"User-Agent": "CryptoTradingAlerts/1.0"}
     )
-    with urllib.request.urlopen(req, timeout=15) as response:
-        return json.load(response)[:-1]
+
+    with urllib.request.urlopen(req, timeout=20) as response:
+        data = json.load(response)
+
+    if data.get("error"):
+        raise ValueError(str(data["error"]))
+
+    result = data["result"]
+    key = next(k for k in result if k != "last")
+
+    # Exclude the candle still forming.
+    return result[key][:-1]
+
 
 def calculate_rsi(closes, period=14):
+    if len(closes) <= period:
+        return None
+
     changes = [
         closes[i] - closes[i - 1]
         for i in range(1, len(closes))
@@ -28,8 +53,13 @@ def calculate_rsi(closes, period=14):
     avg_loss = sum(losses[:period]) / period
 
     for i in range(period, len(changes)):
-        avg_gain = (avg_gain * 13 + gains[i]) / 14
-        avg_loss = (avg_loss * 13 + losses[i]) / 14
+        avg_gain = (
+            avg_gain * (period - 1) + gains[i]
+        ) / period
+
+        avg_loss = (
+            avg_loss * (period - 1) + losses[i]
+        ) / period
 
     if avg_loss == 0:
         return 100 if avg_gain > 0 else 50
@@ -37,51 +67,66 @@ def calculate_rsi(closes, period=14):
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
-def check_coin(symbol):
-    candles = get_candles(symbol)
 
-    closes = [float(c[4]) for c in candles]
-    volumes = [float(c[5]) for c in candles]
+def check_coin(coin, pair):
+    if pair is None:
+        print(f"{coin}: NO TRADE")
+        print("Reason: Market data source not configured")
+        return
 
-    price = closes[-1]
-    ma20 = sum(closes[-20:]) / 20
-    rsi = calculate_rsi(closes)
-
-    recent_sell_volume = sum(
-        volumes[-i] for i in range(1, 4)
-        if closes[-i] < float(candles[-i][1])
-    )
-
-    recent_buy_volume = sum(
-        volumes[-i] for i in range(1, 4)
-        if closes[-i] >= float(candles[-i][1])
-    )
-
-    bearish_volume = recent_sell_volume > recent_buy_volume * 1.5
-
-    buy = (
-        price > ma20
-        and 45 <= rsi <= 65
-        and not bearish_volume
-    )
-
-    timestamp = datetime.fromtimestamp(
-        candles[-1][6] / 1000, timezone.utc
-    ).strftime("%Y-%m-%d %H:%M UTC")
-
-    print(f"\n{symbol} | {timestamp}")
-    print(f"Price: ${price:.6f}")
-    print(f"MA20: ${ma20:.6f}")
-    print(f"RSI: {rsi:.2f}")
-
-    if buy:
-        print(f"POTENTIAL BUY {symbol}")
-        print("Verify trend, Quidax spread and fees before trading.")
-    else:
-        print("NO TRADE")
-
-for coin in COINS:
     try:
-        check_coin(coin)
-    except Exception as error:
-        print(f"{coin}: Data unavailable ({error})")
+        candles = get_candles(pair)
+
+        closes = [float(c[4]) for c in candles]
+        volumes = [float(c[6]) for c in candles]
+
+        if len(closes) < 50:
+            print(f"{coin}: NO TRADE")
+            print("Reason: Insufficient market data")
+            return
+
+        price = closes[-1]
+        ma20 = sum(closes[-20:]) / 20
+        ma50 = sum(closes[-50:]) / 50
+        rsi = calculate_rsi(closes)
+
+        avg_volume = sum(volumes[-21:-1]) / 20
+        current_volume = volumes[-1]
+
+        volume_strong = current_volume > avg_volume * 1.2
+
+        if (
+            price > ma20 > ma50
+            and 50 <= rsi <= 65
+            and volume_strong
+        ):
+            signal = "BUY"
+            reason = "Uptrend with strong volume"
+
+        elif (
+            price < ma20 < ma50
+            and rsi < 45
+            and volume_strong
+        ):
+            signal = "SELL"
+            reason = "Downtrend with strong volume"
+
+        else:
+            signal = "NO TRADE"
+            reason = "Trading conditions not confirmed"
+
+        print(f"\n{coin}: {signal}")
+        print(f"Price: ${price:,.4f}")
+        print(f"RSI: {rsi:.2f}")
+        print(f"Reason: {reason}")
+
+    except Exception as e:
+        print(f"\n{coin}: NO TRADE")
+        print(f"Reason: Market data unavailable ({e})")
+
+
+print("CRYPTO TRADING ALERTS")
+print("Time:", datetime.now(timezone.utc).isoformat())
+
+for coin, pair in COINS.items():
+    check_coin(coin, pair)
