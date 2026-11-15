@@ -70,6 +70,17 @@ def analyze_coin(symbol, coin_id):
         print("SIGNAL: " + signal)
         print("Reason: " + reason)
 
+            if signal in ("BUY", "SELL"):
+            message = (
+                f"CRYPTO TRADING ALERT\n"
+                f"Coin: {symbol}\n"
+                f"Signal: {signal}\n"
+                f"Price: ${current:,.4f}\n"
+                f"Change: {change:+.2f}%\n"
+                f"Reason: {reason}"
+            )
+            send_telegram(message)
+
     except Exception as e:
         print("------------------------")
         print(symbol + ": DATA UNAVAILABLE")
