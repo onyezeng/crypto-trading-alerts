@@ -97,9 +97,6 @@ def main():
     for symbol, coin_id in COINS.items():
         analyze_coin(symbol, coin_id)
 
-
-if __name__ == "__main__":
-    main()
 import os
 
 def send_telegram(message):
@@ -127,3 +124,5 @@ def send_telegram(message):
         print("Telegram response:", response.status)
 
 send_telegram("Crypto Trading Alerts bot is connected!")
+if __name__ == "__main__":
+    main()
