@@ -90,3 +90,30 @@ def main():
 
 if __name__ == "__main__":
     main()
+import os
+
+def send_telegram(message):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
+    if not token or not chat_id:
+        print("Telegram credentials missing")
+        return
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+
+    data = json.dumps({
+        "chat_id": chat_id,
+        "text": message
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"}
+    )
+
+    with urllib.request.urlopen(req, timeout=15) as response:
+        print("Telegram response:", response.status)
+
+send_telegram("Crypto Trading Alerts bot is connected!")
