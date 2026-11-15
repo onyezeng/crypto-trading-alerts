@@ -69,7 +69,7 @@ def analyze_coin(symbol, coin_id):
         print("Change: " + format(change, ".2f") + "%")
         print("SIGNAL: " + signal)
         print("Reason: " + reason)
-        if signal in ("BUY", "SELL"):
+        if signal in ("BUY", "SELL", "NO TRADE"):
             message = (
                 f"CRYPTO TRADING ALERT\n"
                 f"Coin: {symbol}\n"
