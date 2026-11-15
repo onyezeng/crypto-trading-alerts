@@ -4,6 +4,11 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 
+
+# ==========================================
+# CRYPTOCURRENCIES TO MONITOR
+# ==========================================
+
 COINS = {
     "BTC": "bitcoin",
     "ETH": "ethereum",
@@ -11,144 +16,317 @@ COINS = {
     "XRP": "ripple",
     "BNB": "binancecoin"
 }
+
 STATE_FILE = "last_signals.json"
 
+
+# ==========================================
+# LOAD PREVIOUS SIGNALS
+# ==========================================
+
 def load_signals():
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r") as f:
-            return json.load(f)
+    try:
+        if os.path.exists(STATE_FILE):
+            with open(STATE_FILE, "r") as file:
+                data = json.load(file)
+
+            if isinstance(data, dict):
+                return data
+
+    except (OSError, ValueError) as error:
+        print("Unable to load previous signals:", error)
+
     return {}
 
+
+# ==========================================
+# SAVE CURRENT SIGNALS
+# ==========================================
+
 def save_signals(signals):
-    with open(STATE_FILE, "w") as f:
-        json.dump(signals, f)
-def get_market_data(coin_id):
-    url = (
-        "https://api.coingecko.com/api/v3/"
-        "coins/" + coin_id +
-        "/market_chart?vs_currency=usd&days=1"
-    )
+    temporary_file = STATE_FILE + ".tmp"
 
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "application/json"
-        }
-    )
-
-    with urllib.request.urlopen(
-        req, timeout=20
-    ) as response:
-        return json.load(response)
-
-
-def analyze_coin(symbol, coin_id, previous_signals):
     try:
-        data = get_market_data(coin_id)
-        prices = [p[1] for p in data["prices"]]
+        with open(temporary_file, "w") as file:
+            json.dump(signals, file, indent=4)
 
-        if len(prices) < 15:
-            print(symbol + ": NO TRADE")
-            print("Reason: Insufficient data")
-            return
+        os.replace(temporary_file, STATE_FILE)
 
-        current = prices[-1]
-        previous = prices[-13]
+        print("Trading signals saved successfully.")
 
-        change = (
-            (current - previous) / previous
-        ) * 100
-
-        average = sum(prices[-14:]) / 14
-
-        if change > 1 and current > average:
-            signal = "BUY"
-            reason = "Positive short-term momentum"
-
-        elif change < -1 and current < average:
-            signal = "SELL"
-            reason = "Negative short-term momentum"
-
-        else:
-            signal = "NO TRADE"
-            reason = "No strong trading opportunity"
-
-        print("------------------------")
-        print(symbol)
-        print("Price: $" + format(current, ".4f"))
-        print("Change: " + format(change, ".2f") + "%")
-        print("SIGNAL: " + signal)
-        print("Reason: " + reason)
-        if signal in ("BUY", "SELL", "NO TRADE"):
-            message = (
-                f"CRYPTO TRADING ALERT\n"
-                f"Coin: {symbol}\n"
-                f"Signal: {signal}\n"
-                f"Price: ${current:,.4f}\n"
-                f"Change: {change:+.2f}%\n"
-                f"Reason: {reason}"
-            )
-            old_signal = previous_signals.get(symbol)
-
-            if old_signal is None:
-        print(symbol + ": Initial signal recorded")
-            elif signal != old_signal:
-        send_telegram(message)
-        print(symbol + ": Signal changed from " + old_signal + " to " + signal)
-            else:
-        print(symbol + ": Signal unchanged. No alert.")
-
-        previous_signals[symbol] = signal
-
-    except Exception as e:
-        print("------------------------")
-        print(symbol + ": DATA UNAVAILABLE")
-        print("Error: " + str(e))
+    except OSError as error:
+        print("Unable to save signals:", error)
 
 
-def main():
-    previous_signals = load_signals()
-
-
-
-    
-    print("CRYPTO TRADING ALERT BOT")
-    print(
-        datetime.now(timezone.utc).strftime(
-            "%Y-%m-%d %H:%M UTC"
-        )
-    )
-
-    for symbol, coin_id in COINS.items():
-        analyze_coin(symbol, coin_id, previous_signals)
-
-import os
+# ==========================================
+# SEND TELEGRAM NOTIFICATIONS
+# ==========================================
 
 def send_telegram(message):
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
 
     if not token or not chat_id:
-        print("Telegram credentials missing")
-        return
+        print("Telegram credentials are missing.")
+        return False
 
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    url = (
+        "https://api.telegram.org/bot"
+        + token
+        + "/sendMessage"
+    )
 
-    data = json.dumps({
+    payload = json.dumps({
         "chat_id": chat_id,
         "text": message
     }).encode("utf-8")
 
-    req = urllib.request.Request(
+    request = urllib.request.Request(
         url,
-        data=data,
-        headers={"Content-Type": "application/json"}
+        data=payload,
+        headers={
+            "Content-Type": "application/json"
+        },
+        method="POST"
     )
 
-    with urllib.request.urlopen(req, timeout=15) as response:
-        print("Telegram response:", response.status)
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=20
+        ) as response:
 
-send_telegram("Crypto Trading Alerts bot is connected!")
+            if response.status == 200:
+                print("Telegram notification delivered.")
+                return True
+
+    except Exception as error:
+        print("Telegram delivery failed:", error)
+
+    return False
+
+
+# ==========================================
+# GET LIVE CRYPTO MARKET DATA
+# ==========================================
+
+def get_market_data(coin_id):
+    url = (
+        "https://api.coingecko.com/api/v3/"
+        "coins/"
+        + coin_id
+        + "/market_chart?vs_currency=usd&days=1"
+    )
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "CryptoTradingAlerts/1.0",
+            "Accept": "application/json"
+        }
+    )
+
+    with urllib.request.urlopen(
+        request,
+        timeout=30
+    ) as response:
+
+        return json.load(response)
+
+
+# ==========================================
+# ANALYZE EACH CRYPTOCURRENCY
+# ==========================================
+
+def analyze_coin(symbol, coin_id, previous_signals):
+
+    print()
+    print("==============================")
+    print("ANALYZING:", symbol)
+    print("==============================")
+
+    try:
+        data = get_market_data(coin_id)
+
+        prices = [
+            float(item[1])
+            for item in data["prices"]
+        ]
+
+        if len(prices) < 15:
+            print("SIGNAL: NO TRADE")
+            print("Reason: Insufficient market data")
+            return
+
+        current_price = prices[-1]
+        previous_price = prices[-13]
+
+        if previous_price <= 0:
+            print("SIGNAL: NO TRADE")
+            print("Reason: Invalid market data")
+            return
+
+        price_change = (
+            (current_price - previous_price)
+            / previous_price
+        ) * 100
+
+        moving_average = (
+            sum(prices[-14:]) / 14
+        )
+
+        # ==================================
+        # TRADING DECISION
+        # ==================================
+
+        if (
+            price_change > 1.0
+            and current_price > moving_average
+        ):
+
+            signal = "BUY"
+
+            reason = (
+                "Positive short-term momentum. "
+                "Price is above its recent average."
+            )
+
+        elif (
+            price_change < -1.0
+            and current_price < moving_average
+        ):
+
+            signal = "SELL"
+
+            reason = (
+                "Negative short-term momentum. "
+                "Price is below its recent average."
+            )
+
+        else:
+
+            signal = "NO TRADE"
+
+            reason = (
+                "Market conditions do not meet "
+                "the trading requirements."
+            )
+
+        # ==================================
+        # DISPLAY RESULTS
+        # ==================================
+
+        print("Coin:", symbol)
+
+        print(
+            "Price: $"
+            + format(current_price, ",.4f")
+        )
+
+        print(
+            "Change: "
+            + format(price_change, "+.2f")
+            + "%"
+        )
+
+        print("SIGNAL:", signal)
+        print("Reason:", reason)
+
+        # ==================================
+        # PREPARE TELEGRAM MESSAGE
+        # ==================================
+
+        message = (
+            "CRYPTO TRADING ALERT\n\n"
+            f"Coin: {symbol}\n"
+            f"Signal: {signal}\n"
+            f"Price: ${current_price:,.4f}\n"
+            f"Change: {price_change:+.2f}%\n\n"
+            f"Reason: {reason}\n\n"
+            "This is a market signal, "
+            "not a guaranteed profitable trade."
+        )
+
+        # ==================================
+        # CHECK FOR SIGNAL CHANGES
+        # ==================================
+
+        old_signal = previous_signals.get(symbol)
+
+        if old_signal is None:
+
+            print(
+                "Initial signal recorded:",
+                signal
+            )
+
+            previous_signals[symbol] = signal
+
+        elif old_signal != signal:
+
+            print(
+                "Signal changed:",
+                old_signal,
+                "to",
+                signal
+            )
+
+            delivered = send_telegram(message)
+
+            if delivered:
+                previous_signals[symbol] = signal
+
+        else:
+
+            print(
+                "Signal unchanged. "
+                "No Telegram alert needed."
+            )
+
+    except Exception as error:
+
+        print("SIGNAL: DATA UNAVAILABLE")
+        print("Reason:", str(error))
+
+
+# ==========================================
+# MAIN PROGRAM
+# ==========================================
+
+def main():
+
+    print()
+    print("================================")
+    print("CRYPTO TRADING ALERT BOT")
+    print("================================")
+
+    current_time = datetime.now(
+        timezone.utc
+    ).strftime("%Y-%m-%d %H:%M UTC")
+
+    print("Time:", current_time)
+
+    previous_signals = load_signals()
+
+    for symbol, coin_id in COINS.items():
+
+        analyze_coin(
+            symbol,
+            coin_id,
+            previous_signals
+        )
+
+    save_signals(previous_signals)
+
+    print()
+    print("================================")
+    print("MARKET CHECK COMPLETED")
+    print("================================")
+
+
+# ==========================================
+# START PROGRAM
+# ==========================================
+
 if __name__ == "__main__":
     main()
