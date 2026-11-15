@@ -1,0 +1,25 @@
+name: Crypto Trading Alerts
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-crypto:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download bot files
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check cryptocurrency markets
+        run: python crypto_bot.py
