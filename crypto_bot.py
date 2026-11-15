@@ -91,15 +91,15 @@ def analyze_coin(symbol, coin_id, previous_signals):
             )
             old_signal = previous_signals.get(symbol)
 
-if old_signal is None:
-    print(symbol + ": Initial signal recorded")
-elif signal != old_signal:
-    send_telegram(message)
-    print(symbol + ": Signal changed from " + old_signal + " to " + signal)
-else:
-    print(symbol + ": Signal unchanged. No alert.")
+            if old_signal is None:
+        print(symbol + ": Initial signal recorded")
+            elif signal != old_signal:
+        send_telegram(message)
+        print(symbol + ": Signal changed from " + old_signal + " to " + signal)
+            else:
+        print(symbol + ": Signal unchanged. No alert.")
 
-previous_signals[symbol] = signal
+        previous_signals[symbol] = signal
 
     except Exception as e:
         print("------------------------")
