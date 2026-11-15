@@ -1,132 +1,92 @@
 import json
 import urllib.request
+import urllib.error
 from datetime import datetime, timezone
 
 COINS = {
-    "BTC": "XBTUSD",
-    "ETH": "ETHUSD",
-    "SOL": "SOLUSD",
-    "XRP": "XRPUSD",
-    "BNB": None
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "SOL": "solana",
+    "XRP": "ripple",
+    "BNB": "binancecoin"
 }
 
-def get_candles(pair):
-    if pair is None:
-        return None
-
+def get_market_data(coin_id):
     url = (
-        "https://api.kraken.com/0/public/OHLC"
-        f"?pair={pair}&interval=5"
+        "https://api.coingecko.com/api/v3/"
+        "coins/" + coin_id +
+        "/market_chart?vs_currency=usd&days=1"
     )
 
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "CryptoTradingAlerts/1.0"}
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json"
+        }
     )
 
-    with urllib.request.urlopen(req, timeout=20) as response:
-        data = json.load(response)
-
-    if data.get("error"):
-        raise ValueError(str(data["error"]))
-
-    result = data["result"]
-    key = next(k for k in result if k != "last")
-
-    # Exclude the candle still forming.
-    return result[key][:-1]
+    with urllib.request.urlopen(
+        req, timeout=20
+    ) as response:
+        return json.load(response)
 
 
-def calculate_rsi(closes, period=14):
-    if len(closes) <= period:
-        return None
-
-    changes = [
-        closes[i] - closes[i - 1]
-        for i in range(1, len(closes))
-    ]
-
-    gains = [max(x, 0) for x in changes]
-    losses = [max(-x, 0) for x in changes]
-
-    avg_gain = sum(gains[:period]) / period
-    avg_loss = sum(losses[:period]) / period
-
-    for i in range(period, len(changes)):
-        avg_gain = (
-            avg_gain * (period - 1) + gains[i]
-        ) / period
-
-        avg_loss = (
-            avg_loss * (period - 1) + losses[i]
-        ) / period
-
-    if avg_loss == 0:
-        return 100 if avg_gain > 0 else 50
-
-    rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
-
-
-def check_coin(coin, pair):
-    if pair is None:
-        print(f"{coin}: NO TRADE")
-        print("Reason: Market data source not configured")
-        return
-
+def analyze_coin(symbol, coin_id):
     try:
-        candles = get_candles(pair)
+        data = get_market_data(coin_id)
+        prices = [p[1] for p in data["prices"]]
 
-        closes = [float(c[4]) for c in candles]
-        volumes = [float(c[6]) for c in candles]
-
-        if len(closes) < 50:
-            print(f"{coin}: NO TRADE")
-            print("Reason: Insufficient market data")
+        if len(prices) < 15:
+            print(symbol + ": NO TRADE")
+            print("Reason: Insufficient data")
             return
 
-        price = closes[-1]
-        ma20 = sum(closes[-20:]) / 20
-        ma50 = sum(closes[-50:]) / 50
-        rsi = calculate_rsi(closes)
+        current = prices[-1]
+        previous = prices[-13]
 
-        avg_volume = sum(volumes[-21:-1]) / 20
-        current_volume = volumes[-1]
+        change = (
+            (current - previous) / previous
+        ) * 100
 
-        volume_strong = current_volume > avg_volume * 1.2
+        average = sum(prices[-14:]) / 14
 
-        if (
-            price > ma20 > ma50
-            and 50 <= rsi <= 65
-            and volume_strong
-        ):
+        if change > 1 and current > average:
             signal = "BUY"
-            reason = "Uptrend with strong volume"
+            reason = "Positive short-term momentum"
 
-        elif (
-            price < ma20 < ma50
-            and rsi < 45
-            and volume_strong
-        ):
+        elif change < -1 and current < average:
             signal = "SELL"
-            reason = "Downtrend with strong volume"
+            reason = "Negative short-term momentum"
 
         else:
             signal = "NO TRADE"
-            reason = "Trading conditions not confirmed"
+            reason = "No strong trading opportunity"
 
-        print(f"\n{coin}: {signal}")
-        print(f"Price: ${price:,.4f}")
-        print(f"RSI: {rsi:.2f}")
-        print(f"Reason: {reason}")
+        print("------------------------")
+        print(symbol)
+        print("Price: $" + format(current, ".4f"))
+        print("Change: " + format(change, ".2f") + "%")
+        print("SIGNAL: " + signal)
+        print("Reason: " + reason)
 
     except Exception as e:
-        print(f"\n{coin}: NO TRADE")
-        print(f"Reason: Market data unavailable ({e})")
+        print("------------------------")
+        print(symbol + ": DATA UNAVAILABLE")
+        print("Error: " + str(e))
 
 
-print("CRYPTO TRADING ALERTS")
-print("Time:", datetime.now(timezone.utc).isoformat())
+def main():
+    print("CRYPTO TRADING ALERT BOT")
+    print(
+        datetime.now(timezone.utc).strftime(
+            "%Y-%m-%d %H:%M UTC"
+        )
+    )
 
-for coin, pair in COINS.items():
-    check_coin(coin, pair)
+    for symbol, coin_id in COINS.items():
+        analyze_coin(symbol, coin_id)
+
+
+if __name__ == "__main__":
+    main()
