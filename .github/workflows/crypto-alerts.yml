@@ -1,12 +1,17 @@
+
 name: Crypto Trading Alerts
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: crypto-trading-alerts
+  cancel-in-progress: false
 
 jobs:
   check-crypto:
@@ -15,14 +20,38 @@ jobs:
     steps:
       - name: Download bot files
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Check cryptocurrency markets
-        run: python crypto_bot.py
+        id: market_check
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python crypto_bot.py
+
+      - name: Save trading signals
+        if: always()
+        run: |
+          if [ ! -f last_signals.json ]; then
+            echo "No trading signals file to save."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add last_signals.json
+
+          if git diff --cached --quiet; then
+            echo "No changes to trading signals."
+          else
+            git commit -m "Update saved cryptocurrency trading signals"
+            git push
+            echo "Trading signals saved to GitHub."
+          fi
