@@ -251,8 +251,8 @@ def analyze_coin(symbol, coin_id, previous_signals):
         # CHECK FOR SIGNAL CHANGES
         # ==================================
 
-             send_telegram(message)
-        previous_signals[symbol] = signal  
+             
+        
     except Exception as error:
 
         print("SIGNAL: DATA UNAVAILABLE")
