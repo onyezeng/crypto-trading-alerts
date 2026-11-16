@@ -251,38 +251,8 @@ def analyze_coin(symbol, coin_id, previous_signals):
         # CHECK FOR SIGNAL CHANGES
         # ==================================
 
-        old_signal = previous_signals.get(symbol)
-
-        if old_signal is None:
-
-            print(
-                "Initial signal recorded:",
-                signal
-            )
-
-            previous_signals[symbol] = signal
-
-        elif old_signal != signal:
-
-            print(
-                "Signal changed:",
-                old_signal,
-                "to",
-                signal
-            )
-
-            delivered = send_telegram(message)
-
-            if delivered:
-                previous_signals[symbol] = signal
-
-        else:
-
-            print(
-                "Signal unchanged. "
-                "No Telegram alert needed."
-            )
-
+             send_telegram(message)
+        previous_signals[symbol] = signal  
     except Exception as error:
 
         print("SIGNAL: DATA UNAVAILABLE")
